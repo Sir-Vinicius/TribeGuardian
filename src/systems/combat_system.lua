@@ -5,40 +5,50 @@ local function distanceSq(x1, y1, x2, y2)
     return dx * dx + dy * dy
 end
 
-function CombatSystem.resolveAttack(player, enemies)
-    if not player:isAttackActive() then
-        return 0
-    end
-
+function CombatSystem.resolveBullets(player, enemies)
     local killed = 0
-    local ax, ay = player:getAttackCenter()
-    local attackRadius = 22
-
-    for i = #enemies, 1, -1 do
-        local enemy = enemies[i]
-        local reach = attackRadius + enemy.radius
-        if distanceSq(ax, ay, enemy.x, enemy.y) <= reach * reach then
-            enemy.hp = enemy.hp - player.attackDamage
-            if enemy.hp <= 0 then
-                table.remove(enemies, i)
-                killed = killed + 1
+    
+    for i = #player.bullets, 1, -1 do
+        local bullet = player.bullets[i]
+        local hitSomething = false
+        
+        for j = #enemies, 1, -1 do
+            local enemy = enemies[j]
+            local reach = bullet.radius + enemy.radius
+            
+            if distanceSq(bullet.x, bullet.y, enemy.x, enemy.y) <= reach * reach then
+                if enemy:takeDamage(bullet.damage) then
+                    table.remove(enemies, j)
+                    killed = killed + 1
+                end
+                hitSomething = true
+                break
             end
         end
+        
+        if hitSomething then
+            table.remove(player.bullets, i)
+        end
     end
-
+    
     return killed
 end
 
-function CombatSystem.resolveContactDamage(player, enemies, dt)
-    local _ = dt
-
+-- Colisão círculo (inimigo) com retângulo (player)
+function CombatSystem.resolveContactDamage(player, enemies)
+    local px = player.x - player.width/2
+    local py = player.y - player.height/2
+    
     for _, enemy in ipairs(enemies) do
-        local reach = player.radius + enemy.radius
-        if distanceSq(player.x, player.y, enemy.x, enemy.y) <= reach * reach then
-            return player:takeDamage(1)
+        -- Acha ponto mais próximo do retângulo
+        local closestX = math.max(px, math.min(enemy.x, px + player.width))
+        local closestY = math.max(py, math.min(enemy.y, py + player.height))
+        
+        if distanceSq(enemy.x, enemy.y, closestX, closestY) <= enemy.radius * enemy.radius then
+            return player:takeDamage(enemy.damage)
         end
     end
-
+    
     return true
 end
 

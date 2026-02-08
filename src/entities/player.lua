@@ -1,3 +1,5 @@
+local Physics = require("src.systems.physics")
+
 local Player = {}
 Player.__index = Player
 
@@ -5,79 +7,113 @@ function Player.new(x, y)
     return setmetatable({
         x = x,
         y = y,
-        radius = 14,
-        speed = 170,
+        width = 24,
+        height = 32,
+        
+        -- Física
+        vx = 0,
+        vy = 0,
+        speed = 200,
+        jumpForce = -380,
+        grounded = false,
+        
+        -- Combate
         hp = 5,
-        attackCooldown = 0.35,
-        attackTimer = 0,
-        attackRange = 45,
-        attackActiveTime = 0.08,
-        attackActiveTimer = 0,
-        attackDamage = 1,
-        facingX = 1,
-        facingY = 0,
+        shootCooldown = 0.2,
+        shootTimer = 0,
+        bullets = {},
+        bulletSpeed = 500,
+        bulletDamage = 1,
+        
+        -- Estado
+        facingRight = true,
         hitCooldown = 0.6,
         hitTimer = 0
     }, Player)
 end
 
-local function getMoveInput()
-    local dx, dy = 0, 0
-
-    if love.keyboard.isDown("a") or love.keyboard.isDown("left") then
-        dx = dx - 1
+function Player:update(dt, terrain)
+    -- Movimento horizontal
+    local dx = 0
+    if love.keyboard.isDown("a", "left") then
+        dx = -1
+        self.facingRight = false
     end
-    if love.keyboard.isDown("d") or love.keyboard.isDown("right") then
-        dx = dx + 1
+    if love.keyboard.isDown("d", "right") then
+        dx = 1
+        self.facingRight = true
     end
-    if love.keyboard.isDown("w") or love.keyboard.isDown("up") then
-        dy = dy - 1
+    
+    self.vx = dx * self.speed
+    self.x = self.x + self.vx * dt
+    
+    -- Limites laterais
+    local w = love.graphics.getWidth()
+    self.x = math.max(self.width/2, math.min(w - self.width/2, self.x))
+    
+    -- Pulo
+    if (love.keyboard.isDown("w", "up", "space")) and self.grounded then
+        self.vy = self.jumpForce
+        self.grounded = false
     end
-    if love.keyboard.isDown("s") or love.keyboard.isDown("down") then
-        dy = dy + 1
-    end
-
-    return dx, dy
-end
-
-function Player:update(dt)
-    local dx, dy = getMoveInput()
-    local len = math.sqrt(dx * dx + dy * dy)
-
+    
+    -- Física
+    Physics.applyGravity(self, dt)
+    self.y = self.y + self.vy * dt
+    
+    -- Colisão com terreno
+    Physics.resolveTerrainCollision(self, terrain)
+    
+    -- Direção do tiro (mouse)
+    local mx, my = love.mouse.getPosition()
+    local shootDirX = mx - self.x
+    local shootDirY = my - self.y
+    local len = math.sqrt(shootDirX * shootDirX + shootDirY * shootDirY)
     if len > 0 then
-        dx, dy = dx / len, dy / len
-        self.x = self.x + dx * self.speed * dt
-        self.y = self.y + dy * self.speed * dt
-        self.facingX, self.facingY = dx, dy
+        shootDirX, shootDirY = shootDirX / len, shootDirY / len
     end
-
-    local w, h = love.graphics.getDimensions()
-    self.x = math.max(self.radius, math.min(w - self.radius, self.x))
-    self.y = math.max(self.radius, math.min(h - self.radius, self.y))
-
-    self.attackTimer = math.max(0, self.attackTimer - dt)
-    self.attackActiveTimer = math.max(0, self.attackActiveTimer - dt)
+    
+    -- Tiro automático
+    self.shootTimer = self.shootTimer - dt
+    if self.shootTimer <= 0 then
+        self:shoot(shootDirX, shootDirY)
+        self.shootTimer = self.shootCooldown
+    end
+    
+    -- Atualizar balas
+    local screenW, screenH = love.graphics.getDimensions()
+    for i = #self.bullets, 1, -1 do
+        local b = self.bullets[i]
+        b.x = b.x + b.vx * dt
+        b.y = b.y + b.vy * dt
+        b.lifetime = b.lifetime - dt
+        
+        if b.lifetime <= 0 or b.x < 0 or b.x > screenW or b.y < 0 or b.y > screenH then
+            table.remove(self.bullets, i)
+        end
+    end
+    
     self.hitTimer = math.max(0, self.hitTimer - dt)
-
-    if love.keyboard.isDown("space") and self.attackTimer <= 0 then
-        self.attackTimer = self.attackCooldown
-        self.attackActiveTimer = self.attackActiveTime
-    end
 end
 
-function Player:isAttackActive()
-    return self.attackActiveTimer > 0
-end
-
-function Player:getAttackCenter()
-    return self.x + self.facingX * self.attackRange, self.y + self.facingY * self.attackRange
+function Player:shoot(dirX, dirY)
+    local gunOffsetX = self.facingRight and 12 or -12
+    local gunOffsetY = -4
+    
+    table.insert(self.bullets, {
+        x = self.x + gunOffsetX,
+        y = self.y + gunOffsetY,
+        vx = dirX * self.bulletSpeed,
+        vy = dirY * self.bulletSpeed,
+        radius = 4,
+        damage = self.bulletDamage,
+        lifetime = 4
+    })
 end
 
 function Player:takeDamage(amount)
-    if self.hitTimer > 0 then
-        return false
-    end
-
+    if self.hitTimer > 0 then return true end
+    
     self.hp = self.hp - amount
     self.hitTimer = self.hitCooldown
     return self.hp > 0
@@ -85,19 +121,36 @@ end
 
 function Player:draw()
     if self.hitTimer > 0 then
-        love.graphics.setColor(1, 0.6, 0.6)
+        love.graphics.setColor(1, 0.5, 0.5)
     else
-        love.graphics.setColor(0.4, 0.8, 1)
+        love.graphics.setColor(0.4, 0.75, 1)
     end
-    love.graphics.circle("fill", self.x, self.y, self.radius)
-
+    
+    local x = self.x - self.width/2
+    local y = self.y - self.height/2
+    love.graphics.rectangle("fill", x, y, self.width, self.height)
+    
     love.graphics.setColor(0, 0, 0)
-    love.graphics.circle("line", self.x, self.y, self.radius)
-
-    if self:isAttackActive() then
-        local ax, ay = self:getAttackCenter()
-        love.graphics.setColor(1, 0.85, 0.3, 0.6)
-        love.graphics.circle("fill", ax, ay, 22)
+    love.graphics.rectangle("line", x, y, self.width, self.height)
+    
+    -- Indicador de mira
+    love.graphics.setColor(1, 1, 1, 0.8)
+    local mx, my = love.mouse.getPosition()
+    local dirX, dirY = mx - self.x, my - self.y
+    local len = math.sqrt(dirX * dirX + dirY * dirY)
+    if len > 0 then
+        dirX, dirY = dirX / len, dirY / len
+        love.graphics.line(
+            self.x, self.y - 4,
+            self.x + dirX * 18,
+            self.y - 4 + dirY * 18
+        )
+    end
+    
+    -- Balas
+    love.graphics.setColor(1, 0.9, 0.3)
+    for _, b in ipairs(self.bullets) do
+        love.graphics.circle("fill", b.x, b.y, b.radius)
     end
 end
 
