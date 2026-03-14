@@ -1,24 +1,25 @@
+-- src/entities/enemy_fast.lua
 local Enemy = require("src.entities.enemy")
 
-local FastEnemy = setmetatable({}, {__index = Enemy})
-FastEnemy.__index = FastEnemy
+local EnemyFast = {}
+EnemyFast.__index = EnemyFast
+setmetatable(EnemyFast, {__index = Enemy})
 
-function FastEnemy.new(x, y)
+function EnemyFast.new(x, y)
     local self = Enemy.new(x, y, "fast")
-    setmetatable(self, FastEnemy)
+    setmetatable(self, EnemyFast)
     
     -- Customizações
-    self.speed = 140  -- mais rápido
-    self.hp = 1       -- menos vida
-    self.radius = 10  -- menor
-    self.color = {0.9, 0.6, 0.2}  -- laranja
+    self.speed = 140      -- Mais rápido
+    self.hp = 1           -- Menos vida
+    self.maxHp = 1
+    self.radius = 10      -- Menor
+    self.xpReward = 3     -- Menos XP (mais fácil)
+    self.color = {0.9, 0.6, 0.2}  -- Laranja
     
     return self
 end
 
--- Pode sobrescrever métodos se necessário
--- function FastEnemy:update(player, dt)
---     -- comportamento especial
--- end
+-- Usa o update padrão de Enemy (só persegue)
 
-return FastEnemy
+return EnemyFast

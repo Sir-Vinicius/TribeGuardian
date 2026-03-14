@@ -48,7 +48,7 @@ function love.update(dt)
         end
         return
     end
-    
+
     -- Se está escolhendo carta
     if game.state:is(game.state.STATES.CARD_CHOICE) then
         local chosenCardId = game.cardChoice:handleInput()
@@ -59,26 +59,26 @@ function love.update(dt)
         end
         return
     end
-    
+
     -- Gameplay normal
     game.player:update(dt, game.terrain)
-    
+
     game.spawnTimer = game.spawnTimer + dt
     if game.spawnTimer >= game.spawnInterval then
         game.spawnTimer = 0
         EnemySystem.spawn(game.enemies, game.player)
     end
-    
-    EnemySystem.update(game.enemies, game.player, dt)
-    
-    local killed = CombatSystem.resolveBullets(game.player, game.enemies)
+
+    EnemySystem.update(game.enemies, game.player, game.terrain, dt)
+
+    local killed = CombatSystem.resolveEnemyProjectiles(game.player, game.enemies)
     game.score = game.score + killed
-    
+
     -- ← NOVO: Dá XP ao matar
     if killed > 0 then
         -- Assume 5 XP por inimigo (você pode pegar do inimigo.xpReward)
         local leveledUp = game.xpSystem:addXP(killed * 5)
-        
+
         if leveledUp then
             -- Pausa o jogo e mostra cartas
             game.state:setState(game.state.STATES.CARD_CHOICE)
@@ -86,44 +86,47 @@ function love.update(dt)
             game.cardChoice = CardChoice.new(game.cardSystem, choices)
         end
     end
-    
+
     local playerAlive = CombatSystem.resolveContactDamage(game.player, game.enemies, dt)
     if not playerAlive then
         game.state:setState(game.state.STATES.GAME_OVER)
     end
+
+    -- Resolve projéteis de inimigos
+    CombatSystem.resolveEnemyProjectiles(game.player, game.enemies, dt)
 end
 
 function love.draw()
     -- Desenha o terreno
     Terrain.draw(game.terrain)
-    
+
     -- Desenha o jogo
     game.player:draw()
     EnemySystem.draw(game.enemies)
-    
+
     -- HUD
     love.graphics.setColor(1, 1, 1)
     love.graphics.print(string.format("HP: %d", game.player.hp), 12, 10)
     love.graphics.print(string.format("Abates: %d", game.score), 12, 30)
     love.graphics.print(string.format("Level: %d", game.xpSystem.level), 12, 50)
-    
+
     -- Barra de XP
     local barWidth = 200
     local barHeight = 10
     local barX, barY = 12, 70
-    
+
     love.graphics.setColor(0.3, 0.3, 0.3)
     love.graphics.rectangle("fill", barX, barY, barWidth, barHeight)
-    
+
     love.graphics.setColor(0.2, 0.8, 0.3)
     local progress = game.xpSystem:getProgressPercent()
     love.graphics.rectangle("fill", barX, barY, barWidth * progress, barHeight)
-    
+
     -- Tela de escolha de carta
     if game.state:is(game.state.STATES.CARD_CHOICE) and game.cardChoice then
         game.cardChoice:draw()
     end
-    
+
     -- Game Over
     if game.state:is(game.state.STATES.GAME_OVER) then
         love.graphics.printf("Você foi derrotado! Pressione R para reiniciar", 0, 250, 960, "center")

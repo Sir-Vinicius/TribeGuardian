@@ -14,10 +14,13 @@ end
 function Physics.resolveTerrainCollision(entity, terrain)
     local Terrain = require("src.systems.terrain")
     local groundHeight = Terrain.getHeightAt(terrain, entity.x)
-    local entityBottom = entity.y + entity.height / 2
+    
+    -- Usa radius para inimigos, height para player
+    local size = entity.height and (entity.height / 2) or entity.radius
+    local entityBottom = entity.y + size
     
     if entityBottom >= groundHeight then
-        entity.y = groundHeight - entity.height / 2
+        entity.y = groundHeight - size
         entity.vy = 0
         entity.grounded = true
         return true

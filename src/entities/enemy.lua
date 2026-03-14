@@ -1,38 +1,60 @@
+-- src/entities/enemy.lua (CLASSE BASE)
 local Enemy = {}
 Enemy.__index = Enemy
 
+-- Construtor base com valores padrão
 function Enemy.new(x, y, type)
     local self = setmetatable({
         x = x,
         y = y,
         type = type or "basic",
+        
+        -- Atributos padrão (todos os inimigos TÊM que ter)
         radius = 12,
         speed = 80,
         hp = 2,
         maxHp = 2,
         damage = 1,
-        color = {0.9, 0.35, 0.35}
+        xpReward = 5,  -- ← XP que dá ao morrer
+        color = {0.9, 0.35, 0.35},
+        
+        -- Física (platformer)
+        vx = 0,
+        vy = 0,
+        grounded = false,
+        
+        -- Comportamento
+        state = "chase",  -- "chase", "shoot", "idle"
+        attackCooldown = 0,
+        projectiles = {}
     }, Enemy)
     
     return self
 end
 
-function Enemy:update(player, dt)
-    -- IA simples: voa direto pro player
-    local dx, dy = player.x - self.x, player.y - self.y
+-- Método base de update (pode ser sobrescrito)
+function Enemy:update(player, terrain, dt)
+    -- Comportamento padrão: perseguir player
+    local dx = player.x - self.x
+    local dy = player.y - self.y
     local dist = math.sqrt(dx * dx + dy * dy)
     
     if dist > 0 then
-        self.x = self.x + (dx / dist) * self.speed * dt
-        self.y = self.y + (dy / dist) * self.speed * dt
+        self.vx = (dx / dist) * self.speed
+        self.vy = (dy / dist) * self.speed  -- Inimigos voam em direção ao player
     end
+    
+    self.x = self.x + self.vx * dt
+    self.y = self.y + self.vy * dt
 end
 
+-- Método base de dano
 function Enemy:takeDamage(amount)
     self.hp = self.hp - amount
-    return self.hp <= 0
+    return self.hp <= 0, self.xpReward  -- Retorna (morreu?, xp)
 end
 
+-- Método base de desenho
 function Enemy:draw()
     love.graphics.setColor(self.color)
     love.graphics.circle("fill", self.x, self.y, self.radius)
